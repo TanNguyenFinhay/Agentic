@@ -66,9 +66,45 @@ class RerankerClient:
 
 
 class GeneratorClient:
-    def generate_context(self, query, docs):
-        context = "\n".join(docs)  # Kết hợp các đoạn văn thành context
-        return context
+    def __init__(self, api_key: str):
+        self.client = OpenAI(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=api_key
+        )
+
+    def generate_context(self, query: str, docs: list[str]) -> str:
+        # Combine documents into a context string
+        context = "\n".join(docs)
+        
+        # Build messages with instructions and query
+        # Prepare chat messages with a clear instruction and user query
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an intelligent AI assistant specialized in analyzing documents and answering questions based on their content."
+            },
+            {
+                "role": "user",
+                "content": f"{context}\n\nBased on the above information, please answer the following question:\n{query}"
+            }
+        ]
+
+        # Make the chat completion request
+        completion = self.client.chat.completions.create(
+            model="nvidia/llama-3.1-nemotron-70b-instruct",
+            messages=messages,
+            temperature=0.3,
+            top_p=1,
+            max_tokens=1024,
+            stream=True
+        )
+
+        # Collect and return streamed response
+        result = ""
+        for chunk in completion:
+            if chunk.choices[0].delta.content:
+                result += chunk.choices[0].delta.content
+        return result
 
 def extract_text_from_pdf(pdf_path):
     text = ""
@@ -85,8 +121,9 @@ def chunk_text(text: str, chunk_size=500, chunk_overlap=50):
 
 if __name__ == "__main__":
     file_path = "./hihi.pdf"
-    api_key = ""
-    api_key1 = ""
+    api_key = "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"
+    api_key1 = "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"
+    api_key2 = "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"
 
     print(f"Reading file {file_path}...")
     text = extract_text_from_pdf(file_path)
@@ -98,6 +135,7 @@ if __name__ == "__main__":
 
     embedder = EmbedderClient(api_key)
     reranker = RerankerClient(api_key1)
+    generate = GeneratorClient(api_key2)
 
     all_chunks = []
     all_embeddings = []
@@ -136,7 +174,7 @@ if __name__ == "__main__":
             print(f"\n{rank + 1}. ⭐ Score: {score:.4f}")
             print(f"{chunk[:300]}...")
 
-        context = GeneratorClient().generate_context(query, [r[0] for r in reranked])
+        context = generate.generate_context(query, [r[0] for r in reranked])
 
         print("\n💡 Context generated for Reasoner/Generator:")
         print(f"\n{context[:1000]}...")
